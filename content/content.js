@@ -201,6 +201,7 @@ function buildTabStrip(panel, tabs, currentTabId = '__all') {
     btn.className = 'cfm-tab' + (tab.id === currentTabId ? ' cfm-tab--active' : '');
     btn.textContent = tab.name;
     btn.dataset.cfmTab = tab.id;
+    if (tab.color) btn.style.setProperty('--cfm-color', tab.color);
     strip.appendChild(btn);
   });
 
@@ -289,11 +290,11 @@ async function handleTaskOpen(taskId, panel) {
     // Tag field elements (single DOM pass)
     tagFieldElements(panel, fields);
 
-    // Cache field list and list name for the options page.
-    // List name is fire-and-forget — failure is non-critical.
-    chrome.storage.sync.set({ [`fields_${listId}`]: fields });
+    // Cache field list and list name in local storage (not sync — field data can
+    // be large and chrome.storage.sync has a 100 KB quota).
+    chrome.storage.local.set({ [`fields_${listId}`]: fields });
     apiGet(`/list/${listId}`)
-      .then(list => { if (list?.name) chrome.storage.sync.set({ [`listname_${listId}`]: list.name }); })
+      .then(list => { if (list?.name) chrome.storage.local.set({ [`listname_${listId}`]: list.name }); })
       .catch(() => {});
 
     // Build tab strip and apply visibility rules in one animation frame

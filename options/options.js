@@ -23,19 +23,28 @@ const saveStatus          = document.getElementById('save-status');
 // ---------------------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------------------
+// sync  → apiToken, config_*  (small, needs cross-device sync)
+// local → fields_*, listname_* (large field cache, device-only is fine)
 function chromeGet(keys) {
   return new Promise(resolve => chrome.storage.sync.get(keys, resolve));
 }
 function chromeSet(data) {
   return new Promise(resolve => chrome.storage.sync.set(data, resolve));
 }
+function chromeGetLocal(keys) {
+  return new Promise(resolve => chrome.storage.local.get(keys, resolve));
+}
+function chromeSetLocal(data) {
+  return new Promise(resolve => chrome.storage.local.set(data, resolve));
+}
 
 // ---------------------------------------------------------------------------
 // Init — discover lists from cached field data
 // ---------------------------------------------------------------------------
 async function init() {
-  const allData = await chromeGet(null);
-  const listIds = Object.keys(allData)
+  // Field cache lives in local storage
+  const localData = await chromeGetLocal(null);
+  const listIds = Object.keys(localData)
     .filter(k => k.startsWith('fields_'))
     .map(k => k.replace('fields_', ''));
 
@@ -46,7 +55,7 @@ async function init() {
 
   // Show human-readable list names where cached, fall back to raw ID
   const options = listIds.map(id => {
-    const name = allData[`listname_${id}`];
+    const name = localData[`listname_${id}`];
     const label = name ? escHtml(name) : `List ${id}`;
     return `<option value="${id}">${label}</option>`;
   }).join('');
@@ -63,10 +72,14 @@ async function loadList(listId) {
   currentListId = listId;
   selectedTabId = null;
 
-  const data = await chromeGet([`fields_${listId}`, `config_${listId}`]);
-  currentFields = data[`fields_${listId}`] ?? [];
+  // Fields from local; config from sync
+  const [localData, syncData] = await Promise.all([
+    chromeGetLocal(`fields_${listId}`),
+    chromeGet(`config_${listId}`),
+  ]);
+  currentFields = localData[`fields_${listId}`] ?? [];
   currentConfig = JSON.parse(JSON.stringify(  // deep clone so edits don't mutate storage
-    data[`config_${listId}`] ?? { tabs: [], rules: [] }
+    syncData[`config_${listId}`] ?? { tabs: [], rules: [] }
   ));
 
   tabsSection.hidden = false;
@@ -91,16 +104,29 @@ function renderTabs() {
   }
 
   currentConfig.tabs.forEach(tab => {
+    const color = tab.color ?? '#7b68ee';
     const item = document.createElement('div');
     item.className = 'tab-item' + (tab.id === selectedTabId ? ' selected' : '');
+    item.style.setProperty('--tab-color', color);
     item.innerHTML = `
+      <label class="color-swatch-wrap" title="Change tab colour">
+        <input type="color" class="tab-color-input" value="${escHtml(color)}" />
+        <span class="color-swatch" style="background:${escHtml(color)}"></span>
+      </label>
       <span class="tab-name">${escHtml(tab.name)}</span>
-      <button class="btn-delete" data-tab-id="${tab.id}" title="Delete tab">✕</button>
+      <button class="btn-delete" title="Delete tab">✕</button>
     `;
 
-    // Select tab
+    // Colour change — update config and re-render swatch live
+    item.querySelector('.tab-color-input').addEventListener('input', e => {
+      tab.color = e.target.value;
+      item.style.setProperty('--tab-color', tab.color);
+      item.querySelector('.color-swatch').style.background = tab.color;
+    });
+
+    // Select tab (ignore clicks on colour input or delete)
     item.addEventListener('click', e => {
-      if (e.target.closest('.btn-delete')) return;
+      if (e.target.closest('.btn-delete') || e.target.closest('.tab-color-input')) return;
       selectedTabId = tab.id;
       renderTabs();
       renderFieldAssignment();
@@ -124,7 +150,8 @@ addTabBtn.addEventListener('click', () => {
   const name = newTabName.value.trim();
   if (!name) { newTabName.focus(); return; }
 
-  const tab = { id: `tab_${Date.now()}`, name, fieldIds: [] };
+  const color = document.getElementById('new-tab-color').value;
+  const tab = { id: `tab_${Date.now()}`, name, color, fieldIds: [] };
   currentConfig.tabs.push(tab);
   newTabName.value = '';
   selectedTabId = tab.id;
