@@ -1,0 +1,52 @@
+/* ClickUp Field Manager — injected styles */
+
+/* Tab strip */
+.cfm-tab-strip {
+  display: flex;
+  gap: 2px;
+  padding: 6px 16px 0;
+  border-bottom: 2px solid #e5e7eb;
+  background: var(--app-background, #ffffff);
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  flex-wrap: wrap;
+  /* GPU-composited layer so it doesn't cause repaints on scroll */
+  will-change: transform;
+}
+
+.cfm-tab {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  border-radius: 4px 4px 0 0;
+  white-space: nowrap;
+  /* Only transition what we actually animate */
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.cfm-tab:hover  { color: #7b68ee; }
+
+.cfm-tab.cfm-tab--active {
+  color: #7b68ee;
+  border-bottom-color: #7b68ee;
+  font-weight: 600;
+}
+
+/*
+ * Two independent hiding axes:
+ *   data-cfm-tab-hidden   — set by the tab switcher
+ *   data-cfm-rule-hidden  — set by the visibility rules engine
+ * A field is hidden if EITHER attribute is "true".
+ * Using display:none with !important so ClickUp's own styles can't override.
+ */
+[data-cfm-tab-hidden="true"],
+[data-cfm-rule-hidden="true"] {
+  display: none !important;
+}
