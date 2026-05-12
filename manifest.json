@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "ClickUp Field Manager",
+  "version": "0.1.0",
+  "description": "Tabbed record views and conditional field visibility for ClickUp.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://app.clickup.com/*",
+    "https://api.clickup.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.clickup.com/*"],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options/options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
