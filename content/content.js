@@ -289,8 +289,12 @@ async function handleTaskOpen(taskId, panel) {
     // Tag field elements (single DOM pass)
     tagFieldElements(panel, fields);
 
-    // Cache field list for options page
+    // Cache field list and list name for the options page.
+    // List name is fire-and-forget — failure is non-critical.
     chrome.storage.sync.set({ [`fields_${listId}`]: fields });
+    apiGet(`/list/${listId}`)
+      .then(list => { if (list?.name) chrome.storage.sync.set({ [`listname_${listId}`]: list.name }); })
+      .catch(() => {});
 
     // Build tab strip and apply visibility rules in one animation frame
     requestAnimationFrame(() => {
@@ -347,13 +351,8 @@ history.pushState = (...args) => { _push(...args); setTimeout(checkUrl, 50); };
 history.replaceState = (...args) => { _replace(...args); setTimeout(checkUrl, 50); };
 window.addEventListener('popstate', () => setTimeout(checkUrl, 50));
 
-// Also watch for DOM changes that indicate navigation without URL change
-// (childList:false subtree:false = bare minimum footprint)
-const navObserver = new MutationObserver(() => {
-  const taskId = getTaskIdFromUrl();
-  if (taskId !== lastTaskId) checkUrl();
-});
-navObserver.observe(document.body, { childList: true, subtree: false });
+// hashchange covers any hash-based routing ClickUp may use
+window.addEventListener('hashchange', () => setTimeout(checkUrl, 50));
 
 // Check on initial load (direct URL navigation to a task)
 checkUrl();

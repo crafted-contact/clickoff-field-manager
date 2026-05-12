@@ -44,10 +44,14 @@ async function init() {
     return;
   }
 
-  listSelect.innerHTML =
-    '<option value="">— Select a list —</option>' +
-    listIds.map(id => `<option value="${id}">List ${id}</option>`).join('');
+  // Show human-readable list names where cached, fall back to raw ID
+  const options = listIds.map(id => {
+    const name = allData[`listname_${id}`];
+    const label = name ? escHtml(name) : `List ${id}`;
+    return `<option value="${id}">${label}</option>`;
+  }).join('');
 
+  listSelect.innerHTML = '<option value="">— Select a list —</option>' + options;
   listSelect.addEventListener('change', () => loadList(listSelect.value));
 }
 
