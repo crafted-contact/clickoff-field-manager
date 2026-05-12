@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ClickUp Field Manager — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>ClickUp Field Manager</h1>
+      <p class="subtitle">Configure tabs and visibility rules per ClickUp list.</p>
+    </header>
+
+    <!-- Step 1: pick a list -->
+    <section class="card" id="list-select-section">
+      <h2>Select a List</h2>
+      <p class="hint">Open any ClickUp task first so the extension can detect its list and fields. Then come back here.</p>
+      <select id="list-select">
+        <option value="">— no lists detected yet —</option>
+      </select>
+    </section>
+
+    <!-- Step 2: manage tabs -->
+    <section class="card" id="tabs-section" hidden>
+      <h2>Tabs</h2>
+      <p class="hint">Create tabs to group fields. Fields not assigned to any tab always appear under "All Fields".</p>
+      <div id="tabs-list"></div>
+      <div class="add-row">
+        <input type="text" id="new-tab-name" placeholder="Tab name  (e.g. Finance, Client Info…)" />
+        <button id="add-tab-btn" type="button">+ Add Tab</button>
+      </div>
+    </section>
+
+    <!-- Step 3: assign fields to selected tab -->
+    <section class="card" id="field-assignment-section" hidden>
+      <h2>Fields in <span id="active-tab-label">—</span></h2>
+      <p class="hint">Check the fields that should appear in this tab.</p>
+      <div id="field-list"></div>
+    </section>
+
+    <!-- Step 4: visibility rules -->
+    <section class="card" id="rules-section" hidden>
+      <h2>Visibility Rules</h2>
+      <p class="hint">Each field can have one rule. A rule hides or shows that field when its conditions are met — layered on top of tab visibility.</p>
+      <div id="rules-list"></div>
+
+      <div class="rule-builder">
+        <h3>Add / Replace Rule</h3>
+
+        <label>Target field <span class="dim">(the field to show or hide)</span></label>
+        <select id="rule-target-field"></select>
+
+        <label>Action</label>
+        <select id="rule-action">
+          <option value="hide">Hide this field</option>
+          <option value="show">Show this field</option>
+        </select>
+
+        <label>Condition logic</label>
+        <select id="rule-logic">
+          <option value="AND">ALL conditions must match (AND)</option>
+          <option value="OR">ANY condition must match (OR)</option>
+        </select>
+
+        <label>Conditions</label>
+        <div id="conditions-builder"></div>
+
+        <button id="add-condition-btn" type="button" class="btn-secondary">+ Add Condition</button>
+
+        <div class="rule-actions">
+          <button id="save-rule-btn" type="button">Save Rule</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sticky save bar -->
+    <div id="save-bar" hidden>
+      <button id="save-btn" type="button">Save Configuration</button>
+      <span id="save-status"></span>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
