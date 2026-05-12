@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ClickUp Field Manager</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>ClickUp Field Manager</h1>
+
+  <section id="token-section">
+    <label for="token-input">ClickUp Personal API Token</label>
+    <input type="password" id="token-input" placeholder="pk_xxxxxxx..." autocomplete="off" />
+    <button id="save-btn">Save &amp; Verify</button>
+    <p id="status-msg"></p>
+  </section>
+
+  <section id="nav-section">
+    <button id="open-options-btn">Manage Tabs &amp; Rules →</button>
+  </section>
+
+  <p class="hint">
+    Get your token: ClickUp → avatar (bottom-left) → Apps → API Token
+  </p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
