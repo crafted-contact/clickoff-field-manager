@@ -6,7 +6,8 @@
   "permissions": ["storage"],
   "host_permissions": [
     "https://app.clickup.com/*",
-    "https://api.clickup.com/*"
+    "https://api.clickup.com/*",
+    "https://api.lemonsqueezy.com/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
