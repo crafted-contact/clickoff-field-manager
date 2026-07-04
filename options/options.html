@@ -2,48 +2,124 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ClickUp Field Manager — Settings</title>
+  <title>ClickOff Field Manager — Settings</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>ClickUp Field Manager</h1>
-      <p class="subtitle">Configure tabs and visibility rules per ClickUp list.</p>
+      <div class="header-row">
+        <div>
+          <h1>ClickOff Field Manager</h1>
+          <p class="subtitle">Configure tab presets per ClickUp task type.</p>
+        </div>
+        <button id="settings-toggle-btn" class="btn-icon" title="Settings">⚙</button>
+      </div>
     </header>
 
-    <!-- Step 1: pick a list -->
+    <!-- Auth-error banner — shown when the ClickUp API returns 401/403 -->
+    <div id="auth-error-banner" class="auth-error-banner" hidden>
+      <span class="auth-error-text">⚠ Your ClickUp API token is expired or invalid. Tabs won't load until you re-verify it.</span>
+      <button id="auth-error-fix-btn" type="button">Fix token</button>
+    </div>
+
+    <!-- Settings panel (token, licence, accent colour) -->
+    <section class="card" id="settings-section" hidden>
+      <h2>Settings</h2>
+
+      <div class="settings-group">
+        <h3>ClickUp API Token</h3>
+        <label for="s-token-input">Personal API Token</label>
+        <input type="password" id="s-token-input" placeholder="pk_xxxxxxx…" autocomplete="off" />
+        <div class="settings-row">
+          <button id="s-save-token-btn">Save &amp; Verify</button>
+          <span id="s-token-msg"></span>
+        </div>
+        <p class="hint" style="margin-top:6px">ClickUp → Settings → ClickUp API → Generate</p>
+      </div>
+
+      <div class="settings-group">
+        <h3>Licence</h3>
+        <div id="s-licence-free" hidden>
+          <p class="licence-badge free">Free — up to 3 tabs per task type</p>
+          <a href="https://buymeacoffee.com/dmonahu" target="_blank" class="bmc-btn">☕ Support on Buy Me a Coffee</a>
+          <p class="hint" style="margin:6px 0 10px">Supporters receive a Pro key by email.</p>
+          <label for="s-licence-input">Pro Key</label>
+          <input type="text" id="s-licence-input" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" autocomplete="off" spellcheck="false" />
+          <div class="settings-row">
+            <button id="s-activate-btn">Activate Pro</button>
+            <span id="s-licence-msg"></span>
+          </div>
+        </div>
+        <div id="s-licence-pro" hidden>
+          <p class="licence-badge pro">✓ Pro — unlimited tabs</p>
+          <button id="s-deactivate-btn" class="btn-ghost btn-sm">Remove licence</button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Accent Colour</h3>
+        <div class="colour-row">
+          <input type="color" id="s-accent-colour" value="#7b68ee">
+          <input type="text" id="s-accent-hex" value="#7b68ee" maxlength="7" spellcheck="false" style="width:90px">
+          <button id="s-reset-colour-btn" type="button" class="btn-ghost btn-sm">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 1: task type context (auto-followed from active ClickUp task) -->
     <section class="card" id="list-select-section">
-      <h2>Select a List</h2>
-      <p class="hint">Open any ClickUp task first so the extension can detect its list and fields. Then come back here.</p>
-      <select id="list-select">
-        <option value="">— no lists detected yet —</option>
-      </select>
+      <h2>Task Type</h2>
+      <!-- Active type banner — shown once cfm_active_type is received -->
+      <div id="type-context-banner" class="type-context-banner" hidden>
+        <span class="type-context-label">Editing preset for:</span>
+        <strong id="type-context-name"></strong>
+      </div>
+      <p id="type-context-hint" class="hint">Open a task in ClickUp — this panel will automatically follow the task type.</p>
+
+      <details id="field-source-details" class="field-source-details">
+        <summary>Field source <span class="dim">(list used to load available fields)</span></summary>
+        <div class="list-select-row" style="margin-top:8px">
+          <select id="list-select">
+            <option value="">— loading lists… —</option>
+          </select>
+          <button id="refresh-lists-btn" type="button" class="btn-icon" title="Refresh all lists from workspace">↻</button>
+        </div>
+      </details>
+
+      <div id="quick-template-row" class="quick-template-row" hidden>
+        <select id="quick-template-select"></select>
+        <button id="quick-apply-btn" type="button" class="btn-secondary btn-sm">Apply</button>
+      </div>
+      <p id="quick-template-msg" class="quick-template-msg"></p>
     </section>
 
     <!-- Step 2: manage tabs -->
     <section class="card" id="tabs-section" hidden>
       <h2>Tabs</h2>
-      <p class="hint">Create tabs to group fields. Fields not assigned to any tab always appear under "All Fields".</p>
+      <p class="hint">Create tabs to group fields. When a tab is active, only checked items are visible.</p>
       <div id="tabs-list"></div>
       <div class="add-row">
-        <input type="color" id="new-tab-color" value="#7b68ee" title="Tab colour" />
         <input type="text" id="new-tab-name" placeholder="Tab name  (e.g. Finance, Client Info…)" />
         <button id="add-tab-btn" type="button">+ Add Tab</button>
       </div>
+      <label class="default-tab-label">
+        <input type="checkbox" id="all-fields-default-cb">
+        Make "All Fields" the default view when opening a task
+      </label>
     </section>
 
     <!-- Step 3: assign fields to selected tab -->
     <section class="card" id="field-assignment-section" hidden>
-      <h2>Fields in <span id="active-tab-label">—</span></h2>
-      <p class="hint">Check the fields that should appear in this tab.</p>
+      <h2>Visible in <span id="active-tab-label">—</span></h2>
+      <p class="hint">Checked items are shown when this tab is active. Everything else is hidden.</p>
       <div id="field-list"></div>
     </section>
 
     <!-- Step 4: visibility rules -->
     <section class="card" id="rules-section" hidden>
       <h2>Visibility Rules</h2>
-      <p class="hint">Each field can have one rule. A rule hides or shows that field when its conditions are met — layered on top of tab visibility.</p>
+      <p class="hint">Each field can have one rule. A rule hides or shows that field based on conditions — applied on top of tab visibility.</p>
       <div id="rules-list"></div>
 
       <div class="rule-builder">
@@ -72,6 +148,68 @@
         <div class="rule-actions">
           <button id="save-rule-btn" type="button">Save Rule</button>
         </div>
+      </div>
+    </section>
+
+    <!-- Step 5: templates -->
+    <section class="card" id="templates-section" hidden>
+      <h2>Templates</h2>
+      <p class="hint">Save the current tab layout as a template. Fields are matched by name, so any list sharing the same field names can load it.</p>
+      <!-- Edit mode banner (shown while editing a template) -->
+      <div id="template-edit-banner" class="template-edit-banner" hidden>
+        <span>Editing template: <strong id="template-edit-banner-name"></strong></span>
+        <div class="template-edit-banner-actions">
+          <button id="template-edit-update-btn" type="button" class="btn-secondary btn-sm">Update Template</button>
+          <button id="template-edit-exit-btn" type="button" class="btn-ghost btn-sm">Cancel</button>
+        </div>
+      </div>
+
+      <div class="templates-row">
+        <select id="template-select"><option value="">— select a template —</option></select>
+        <button id="load-template-btn" type="button" class="btn-secondary">Load</button>
+        <button id="edit-template-btn" type="button" class="btn-secondary">Edit</button>
+        <button id="delete-template-btn" type="button" class="btn-ghost btn-sm">Delete</button>
+      </div>
+
+      <!-- List picker shown after clicking Edit -->
+      <div id="template-edit-picker" class="template-edit-picker" hidden>
+        <p class="hint" style="margin:0 0 6px">Select a list to load available fields for this template:</p>
+        <div class="template-edit-picker-row">
+          <select id="template-edit-list-select"></select>
+          <button id="template-edit-begin-btn" type="button" class="btn-secondary btn-sm">Begin editing</button>
+          <button id="template-edit-cancel-picker-btn" type="button" class="btn-ghost btn-sm">Cancel</button>
+        </div>
+      </div>
+
+      <div class="templates-row">
+        <input type="text" id="template-name" placeholder="Template name…" />
+        <button id="save-template-btn" type="button" class="btn-secondary">Save as template</button>
+      </div>
+      <p id="template-msg"></p>
+
+      <div style="margin-top: 14px;">
+        <button id="show-bulk-apply-btn" type="button" class="btn-secondary btn-sm">Bulk apply to lists →</button>
+      </div>
+
+      <div id="bulk-apply-section" hidden>
+        <div class="bulk-divider"></div>
+        <h3>Bulk Apply</h3>
+        <p class="hint">Apply a template to multiple lists at once. Fields are matched by name — partial matches are applied and reported, zero-match lists are skipped.</p>
+
+        <label>Template to apply</label>
+        <select id="bulk-template-select"><option value="">— select a template —</option></select>
+
+        <label>Target lists <span class="dim">(check the lists to update)</span></label>
+        <input type="text" id="bulk-list-search" placeholder="Filter lists…" />
+        <div id="bulk-list-checklist"></div>
+
+        <div class="bulk-actions">
+          <button id="bulk-select-all-btn" type="button" class="btn-secondary btn-sm">Select all</button>
+          <button id="bulk-clear-btn" type="button" class="btn-secondary btn-sm">Clear</button>
+          <button id="bulk-apply-btn" type="button">Apply to selected</button>
+        </div>
+
+        <div id="bulk-results"></div>
       </div>
     </section>
 

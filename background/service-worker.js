@@ -1,5 +1,8 @@
 const CLICKUP_BASE = 'https://api.clickup.com/api/v2';
 
+// Open the side panel when the user clicks the extension icon.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
 // In-memory cache: avoids re-fetching the same path within a session.
 // Keyed by path; entries expire after 60 seconds so field values stay fresh.
 const cache = new Map();
@@ -18,13 +21,28 @@ function setCached(path, data) {
 
 async function clickupGet(path, token) {
   const cached = getCached(path);
-  if (cached) return cached;
+  if (cached) {
+    // A served cache entry still proves the token works — clear any stale flag.
+    chrome.storage.local.remove('cfm_auth_error');
+    return cached;
+  }
 
   const res = await fetch(`${CLICKUP_BASE}${path}`, {
     headers: { Authorization: token }
   });
-  if (!res.ok) throw new Error(`ClickUp API ${res.status}: ${path}`);
+  if (!res.ok) {
+    // Only 401 means the token itself is invalid/expired/revoked — flag it so
+    // the side panel prompts the user to re-verify. A 403 means the token is
+    // valid but lacks access to THIS resource (e.g. a task in a restricted
+    // space); re-entering a token can't fix that, so it must NOT set the flag.
+    if (res.status === 401) {
+      chrome.storage.local.set({ cfm_auth_error: { status: 401, path, ts: Date.now() } });
+    }
+    throw new Error(`ClickUp API ${res.status}: ${path}`);
+  }
   const data = await res.json();
+  // A successful call proves the token works — clear any stale auth-error flag.
+  chrome.storage.local.remove('cfm_auth_error');
   setCached(path, data);
   return data;
 }
@@ -32,6 +50,23 @@ async function clickupGet(path, token) {
 // Invalidate cache entry when a task is re-opened (content script signals this)
 function invalidate(path) {
   cache.delete(path);
+}
+
+// Read the API token from chrome.storage.local. A ClickUp personal token grants
+// full account access, so we keep it on-device rather than syncing it through
+// the user's Google account. Older builds stored it in storage.sync — migrate
+// that token to local transparently the first time we need it.
+async function getApiToken() {
+  const { apiToken } = await chrome.storage.local.get('apiToken');
+  if (apiToken) return apiToken;
+
+  const synced = await chrome.storage.sync.get('apiToken');
+  if (synced.apiToken) {
+    await chrome.storage.local.set({ apiToken: synced.apiToken });
+    await chrome.storage.sync.remove('apiToken');
+    return synced.apiToken;
+  }
+  return null;
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -42,9 +77,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type !== 'CLICKUP_API') return false;
 
-  chrome.storage.sync.get('apiToken', async ({ apiToken }) => {
+  (async () => {
+    const apiToken = await getApiToken();
     if (!apiToken) {
-      sendResponse({ error: 'No API token set. Open the extension popup to add one.' });
+      sendResponse({ error: 'No API token set. Open the extension settings to add one.' });
       return;
     }
     try {
@@ -53,95 +89,77 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     } catch (err) {
       sendResponse({ error: err.message });
     }
-  });
+  })();
 
   return true; // keep message channel open for async response
 });
 
-// ---------------------------------------------------------------------------
-// Lemon Squeezy licence API
-// ---------------------------------------------------------------------------
-const LS_BASE           = 'https://api.lemonsqueezy.com/v1/licenses';
-const VALIDATION_TTL_MS = 24 * 60 * 60 * 1000;  // re-check after 24 h
-const GRACE_PERIOD_MS   =  7 * 24 * 60 * 60 * 1000; // stay valid 7 days offline
+// VERIFY_TOKEN — test a candidate token against /user WITHOUT writing it to
+// storage. Lets the options page validate a new token before persisting it, so
+// a failed re-entry never clobbers a previously-working token.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type !== 'VERIFY_TOKEN') return false;
+  (async () => {
+    try {
+      const res = await fetch(`${CLICKUP_BASE}/user`, {
+        headers: { Authorization: message.token ?? '' }
+      });
+      if (!res.ok) { sendResponse({ ok: false, status: res.status }); return; }
+      const data = await res.json();
+      sendResponse({ ok: true, user: data.user });
+    } catch (err) {
+      sendResponse({ ok: false, error: err.message });
+    }
+  })();
+  return true;
+});
 
-async function lsPost(endpoint, params) {
-  const res = await fetch(`${LS_BASE}/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json',
-    },
-    body: new URLSearchParams(params).toString(),
-  });
-  const json = await res.json().catch(() => ({}));
-  return { ok: res.ok, json };
-}
+// ---------------------------------------------------------------------------
+// Licence — server-side validation (HMAC, no key material in the client)
+// ---------------------------------------------------------------------------
+// Keys are validated by the Netlify function; the signing secret never ships in
+// the extension, so a valid key can't be forged from this code. See LICENSING.md.
+// The signing secret lives only on Netlify (env var CFM_LICENCE_SECRET), so a
+// valid key can't be forged from this code. The same origin is in host_permissions.
+const LICENCE_ENDPOINT = 'https://clickoffext.netlify.app/.netlify/functions/licence-validate';
 
-// LICENCE_ACTIVATE — user enters a new key for the first time
+// LICENCE_ACTIVATE — validate the entered key against the licence endpoint
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type !== 'LICENCE_ACTIVATE') return false;
   (async () => {
-    const { key, instanceName } = message;
+    const key = (message.key ?? '').trim().toUpperCase();
     try {
-      const { ok, json } = await lsPost('activate', {
-        license_key: key,
-        instance_name: instanceName,
+      const res = await fetch(LICENCE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
       });
-      if (ok && json.activated) {
-        const licence = { key, instanceId: json.instance.id, valid: true, checkedAt: Date.now() };
-        await chrome.storage.sync.set({ licence });
-        sendResponse({ success: true, customerName: json.meta?.customer_name ?? '' });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.valid) {
+        await chrome.storage.sync.set({ licence: { valid: true, key } });
+        sendResponse({ success: true });
       } else {
         sendResponse({ success: false, error: json.error ?? 'Invalid licence key.' });
       }
-    } catch (err) {
-      sendResponse({ success: false, error: 'Network error — check your connection.' });
+    } catch (_) {
+      sendResponse({ success: false, error: 'Network error — check your connection and try again.' });
     }
   })();
   return true;
 });
 
-// LICENCE_CHECK — validate stored key; skips network if checked recently
+// LICENCE_CHECK — read stored flag; fully offline, instant
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type !== 'LICENCE_CHECK') return false;
-  (async () => {
-    const { licence } = await chrome.storage.sync.get('licence');
-    if (!licence?.key) { sendResponse({ isPro: false }); return; }
-
-    const age = Date.now() - (licence.checkedAt ?? 0);
-    if (age < VALIDATION_TTL_MS) { sendResponse({ isPro: licence.valid }); return; }
-
-    try {
-      const { ok, json } = await lsPost('validate', {
-        license_key: licence.key,
-        instance_id: licence.instanceId,
-      });
-      const valid = ok && json.valid === true;
-      await chrome.storage.sync.set({ licence: { ...licence, valid, checkedAt: Date.now() } });
-      sendResponse({ isPro: valid });
-    } catch {
-      // Network failure — honour grace period
-      const withinGrace = (Date.now() - licence.checkedAt) < GRACE_PERIOD_MS;
-      sendResponse({ isPro: withinGrace && licence.valid });
-    }
-  })();
+  chrome.storage.sync.get('licence', ({ licence }) => {
+    sendResponse({ isPro: licence?.valid === true });
+  });
   return true;
 });
 
-// LICENCE_DEACTIVATE — user removes key; frees up an activation slot on LS
+// LICENCE_DEACTIVATE — clear stored flag
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type !== 'LICENCE_DEACTIVATE') return false;
-  (async () => {
-    const { licence } = await chrome.storage.sync.get('licence');
-    if (licence?.key && licence?.instanceId) {
-      await lsPost('deactivate', {
-        license_key: licence.key,
-        instance_id: licence.instanceId,
-      }).catch(() => {}); // best-effort
-    }
-    await chrome.storage.sync.remove('licence');
-    sendResponse({ success: true });
-  })();
+  chrome.storage.sync.remove('licence', () => sendResponse({ success: true }));
   return true;
 });

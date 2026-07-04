@@ -3,50 +3,94 @@
 /* Tab strip */
 .cfm-tab-strip {
   display: flex;
-  gap: 2px;
-  padding: 6px 16px 0;
-  border-bottom: 2px solid #e5e7eb;
-  background: var(--app-background, #ffffff);
+  gap: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(4px);
   position: sticky;
   top: 0;
   z-index: 200;
   flex-wrap: wrap;
-  /* GPU-composited layer so it doesn't cause repaints on scroll */
   will-change: transform;
 }
 
 .cfm-tab {
-  padding: 6px 14px;
+  padding: 8px 18px;
   font-size: 13px;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--cu-text-secondary, #6b7280);
   border: none;
   background: transparent;
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  border-radius: 4px 4px 0 0;
+  margin-bottom: -1px;
   white-space: nowrap;
-  /* Only transition what we actually animate */
   transition: color 0.12s ease, border-color 0.12s ease;
 }
 
-.cfm-tab:hover  { color: var(--cfm-color, #7b68ee); }
+.cfm-tab:hover { color: var(--cu-color-brand, #7b68ee); }
 
 .cfm-tab.cfm-tab--active {
-  color: var(--cfm-color, #7b68ee);
-  border-bottom-color: var(--cfm-color, #7b68ee);
+  color: var(--cu-color-brand, #7b68ee);
+  border-bottom-color: var(--cu-color-brand, #7b68ee);
   font-weight: 600;
+}
+
+/* Dark theme overrides */
+body.dark-theme .cfm-tab-strip {
+  background: rgba(22, 22, 35, 0.97);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .cfm-tab {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+body.dark-theme .cfm-tab:hover,
+body.dark-theme .cfm-tab.cfm-tab--active {
+  color: #9f8fff;
+}
+
+body.dark-theme .cfm-tab.cfm-tab--active {
+  border-bottom-color: #9f8fff;
 }
 
 /*
  * Two independent hiding axes:
- *   data-cfm-tab-hidden   — set by the tab switcher
+ *   data-cfm-tab-hidden   — set by the tab switcher (custom fields only)
  *   data-cfm-rule-hidden  — set by the visibility rules engine
- * A field is hidden if EITHER attribute is "true".
- * Using display:none with !important so ClickUp's own styles can't override.
  */
 [data-cfm-tab-hidden="true"],
-[data-cfm-rule-hidden="true"] {
+[data-cfm-rule-hidden="true"],
+[data-cfm-wrapper-hidden="true"] {
   display: none !important;
 }
+
+/*
+ * Containers that hold a mix of visible and hidden tagged fields may have
+ * explicit heights set by ClickUp/Angular that don't shrink when children
+ * are hidden. Force natural height so the container wraps its visible content.
+ */
+[data-cfm-mixed="true"] {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/*
+ * ClickUp's "show N empty fields" toggle — reduce the gap above it when the
+ * fields preceding it are hidden by the active tab.
+ */
+[data-cfm-empty-toggle="true"] {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Spacer injected below the tab strip to guarantee breathing room before
+ * the first visible field, regardless of which element comes first. */
+.cfm-tab-spacer {
+  height: 24px;
+  flex-shrink: 0;
+}
+
+

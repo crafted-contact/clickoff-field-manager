@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "ClickUp Field Manager",
+  "name": "ClickOff Field Manager",
   "version": "0.1.0",
-  "description": "Tabbed record views and conditional field visibility for ClickUp.",
-  "permissions": ["storage"],
+  "description": "Tabbed task views and conditional field visibility for ClickUp. Group fields into named tabs — only selected fields are shown.",
+  "permissions": ["storage", "sidePanel"],
+  "side_panel": { "default_path": "options/options.html" },
   "host_permissions": [
     "https://app.clickup.com/*",
     "https://api.clickup.com/*",
-    "https://api.lemonsqueezy.com/*"
+    "https://clickoffext.netlify.app/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
@@ -21,14 +22,12 @@
     }
   ],
   "action": {
-    "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
-  "options_page": "options/options.html",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
