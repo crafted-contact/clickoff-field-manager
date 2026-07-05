@@ -4,7 +4,9 @@ All notable changes to **ClickOff Field Manager** are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); this project
 uses [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] — 2026-07-05
+
+First public release.
 
 ### Fixed
 - **Task URL parsing.** ClickUp changed task URLs to `/t/{workspaceId}/{taskId}`.
