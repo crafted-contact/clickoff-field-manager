@@ -40,20 +40,21 @@ First public release.
   API call clears the flag automatically.
 
 ### Changed
+- **Now free and unrestricted.** Removed the 3-tab free limit and the entire Pro
+  licence flow. All features are available to everyone; support is optional via a
+  Buy Me a Coffee link in Settings. (The prior HMAC licence system is kept in git
+  history on `main` should a paid tier ever return.)
 - **API token moved to `chrome.storage.local`.** A ClickUp personal token grants
   full account access; it no longer syncs through the user's Google account.
   A one-time migration moves any token left in `storage.sync` to `local`
   transparently, so existing users are not signed out.
-- **Pro licence now validated server-side (HMAC).** Replaced the plaintext shared
-  passphrase with a stateless Netlify Function
-  (`clickoffext.netlify.app`); the signing secret lives only on the server, so
-  keys can't be forged from the shipped code. Keys are minted with
-  `tools/mint-licence.mjs` and revoked via a denylist env var. See `LICENSING.md`.
 
 ### Removed
 - **Dead `popup/` directory** and the `scripting` permission it was the sole user
   of. The extension icon has opened the side panel directly since the popup was
   superseded; permissions are now just `storage` + `sidePanel`.
+- **Licence UI, handlers, and the `clickoffext.netlify.app` host permission.** The
+  extension now makes no network requests other than to ClickUp.
 
 ## [0.1.0] — 2026-05-21
 

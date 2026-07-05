@@ -322,36 +322,18 @@ The popup contains:
 
 ---
 
-## Licensing (Pro)
+## Pricing
 
-The extension validates keys against a **stateless HMAC endpoint** (Netlify
-Function). The signing secret lives only on the server, so valid keys cannot be
-forged from the shipped extension code. Full setup, minting, and deployment
-instructions are in [`../LICENSING.md`](../LICENSING.md).
+The extension is **free and unrestricted** — all features, unlimited tabs, no
+licence. Support is entirely optional via a **Buy Me a Coffee** link in
+⚙ Settings → Support this project ([buymeacoffee.com/dmonahu](https://buymeacoffee.com/dmonahu)).
 
-### How it works
+There is no licence server and the extension makes no network requests other than
+to ClickUp (`api.clickup.com`) using the user's own token.
 
-1. You mint a key with `tools/mint-licence.mjs` (using your server secret) and
-   send it to the supporter — e.g. after a Buy Me a Coffee payment.
-2. The user enters the key in Settings → Licence → Pro Key.
-3. `LICENCE_ACTIVATE` POSTs the key to the Netlify endpoint, which recomputes the
-   HMAC signature and returns `{ valid: true/false }`.
-4. On success, `{ valid: true, key }` is written to `chrome.storage.sync`.
-5. `LICENCE_CHECK` reads that flag offline — no network call on normal loads.
-
-### Payment
-
-Supporters pay via [Buy Me a Coffee](https://buymeacoffee.com/dmonahu). After
-payment, mint a key and email it (or automate via a BMC welcome message).
-
-### Revoking a key
-
-Add the key's `id` (the middle segment of `CFM-<id>-<sig>`) to the
-`CFM_LICENCE_DENYLIST` env var on Netlify. See `LICENSING.md`.
-
-> **Note:** the `licence.valid` flag is client-side, so a determined user can
-> flip it in devtools — true of any in-extension gate. HMAC prevents *forging
-> keys*; server-enforced gating would require moving the feature server-side.
+> The previous HMAC licence system (Netlify function, `tools/mint-licence.mjs`,
+> `LICENSING.md`) is retained in git history on the `main` branch in case a paid
+> tier is ever reintroduced, but is not used in this version.
 
 ---
 
@@ -359,10 +341,6 @@ Add the key's `id` (the middle segment of `CFM-<id>-<sig>`) to the
 
 Before submitting to the Chrome Web Store:
 
-- [ ] `DEV_FORCE_PRO` is `false` in `options/options.js`
-- [ ] `LICENCE_ENDPOINT` in `service-worker.js` points to your deployed Netlify site
-- [ ] The same Netlify origin is listed in `manifest.json` → `host_permissions`
-- [ ] `CFM_LICENCE_SECRET` is set on Netlify and a test key activates end-to-end
 - [ ] `manifest.json` version number bumped
 - [ ] `icons/` contains all three sizes (16, 48, 128)
 - [ ] No `console.log` calls left for sensitive data (API token, licence key)

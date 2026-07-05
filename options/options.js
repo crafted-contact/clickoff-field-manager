@@ -1,8 +1,5 @@
 // ClickUp Field Manager — Options page
-
-const FREE_TAB_LIMIT = 3;
-const DEV_FORCE_PRO = false;
-let isPro = false;
+// Free and unrestricted. Support is via an optional Buy Me a Coffee link.
 
 let currentListId      = null;   // list used for field fetching (not the config key)
 let currentWorkspaceId = null;   // ClickUp workspace ID
@@ -238,12 +235,6 @@ quickApplyBtn.addEventListener('click', async () => {
   const tpl = templates.find(t => t.id === id);
   if (!tpl) return;
 
-  if (!isPro && tpl.config.tabs.length > FREE_TAB_LIMIT) {
-    quickTemplateMsg.textContent = `This template has ${tpl.config.tabs.length} tabs — upgrade to Pro.`;
-    setTimeout(() => { quickTemplateMsg.textContent = ''; }, 3000);
-    return;
-  }
-
   const nameToId = new Map(currentFields.map(f => [f.name.toLowerCase(), f.id]));
   currentConfig = {
     tabs: tpl.config.tabs.map(tab => ({
@@ -472,21 +463,6 @@ function renderTabs() {
     tabsList.innerHTML = '<p class="empty">No tabs yet. Add one below.</p>';
   }
 
-  const atLimit = !isPro && currentConfig.tabs.length >= FREE_TAB_LIMIT;
-  addTabBtn.disabled = atLimit;
-  addTabBtn.title = atLimit ? 'Upgrade to Pro for more than 3 tabs' : '';
-
-  const existingBadge = document.getElementById('tab-limit-badge');
-  if (atLimit && !existingBadge) {
-    const badge = document.createElement('p');
-    badge.id = 'tab-limit-badge';
-    badge.className = 'tab-limit-badge';
-    badge.innerHTML = `${FREE_TAB_LIMIT}/${FREE_TAB_LIMIT} tabs used — <a href="https://buymeacoffee.com/dmonahu" target="_blank">upgrade to Pro</a> for unlimited tabs`;
-    document.querySelector('.add-row').insertAdjacentElement('afterend', badge);
-  } else if (!atLimit && existingBadge) {
-    existingBadge.remove();
-  }
-
   currentConfig.tabs.forEach(tab => {
     const fieldCount = (tab.fieldIds ?? []).length;
     const isDefault  = currentConfig.defaultTab === tab.id;
@@ -533,7 +509,6 @@ function renderTabs() {
 }
 
 addTabBtn.addEventListener('click', () => {
-  if (!isPro && currentConfig.tabs.length >= FREE_TAB_LIMIT) return;
   const name = newTabName.value.trim();
   if (!name) { newTabName.focus(); return; }
   const tab = { id: `tab_${Date.now()}`, name, fieldIds: [] };
@@ -850,11 +825,6 @@ loadTemplateBtn.addEventListener('click', async () => {
   const tpl = templates.find(t => t.id === id);
   if (!tpl) return;
 
-  if (!isPro && tpl.config.tabs.length > FREE_TAB_LIMIT) {
-    setTemplateMsg(`This template has ${tpl.config.tabs.length} tabs — upgrade to Pro to load it.`, 0);
-    return;
-  }
-
   const nameToId = new Map(currentFields.map(f => [f.name.toLowerCase(), f.id]));
 
   currentConfig = {
@@ -1140,13 +1110,6 @@ async function doBulkApply(templateId, lists) {
     });
   });
 
-  if (!isPro && tpl.config.tabs.length > FREE_TAB_LIMIT) {
-    return lists.map(({ path }) => ({
-      path, status: 'blocked',
-      detail: `Template has ${tpl.config.tabs.length} tabs — upgrade to Pro to apply it`,
-    }));
-  }
-
   const results = [];
 
   for (const { id: listId, path } of lists) {
@@ -1247,12 +1210,6 @@ const settingsSection    = document.getElementById('settings-section');
 const sTokenInput        = document.getElementById('s-token-input');
 const sSaveTokenBtn      = document.getElementById('s-save-token-btn');
 const sTokenMsg          = document.getElementById('s-token-msg');
-const sLicenceFree       = document.getElementById('s-licence-free');
-const sLicencePro        = document.getElementById('s-licence-pro');
-const sLicenceInput      = document.getElementById('s-licence-input');
-const sActivateBtn       = document.getElementById('s-activate-btn');
-const sDeactivateBtn     = document.getElementById('s-deactivate-btn');
-const sLicenceMsg        = document.getElementById('s-licence-msg');
 const sAccentColour      = document.getElementById('s-accent-colour');
 const sAccentHex         = document.getElementById('s-accent-hex');
 const sResetColourBtn    = document.getElementById('s-reset-colour-btn');
@@ -1309,42 +1266,6 @@ sSaveTokenBtn.addEventListener('click', () => {
 
 sTokenInput.addEventListener('keydown', e => { if (e.key === 'Enter') sSaveTokenBtn.click(); });
 
-// ── Licence ─────────────────────────────────────────────────────────────────
-function setLicenceMsg(text, color) {
-  sLicenceMsg.textContent = text;
-  sLicenceMsg.style.color = color;
-}
-
-function showLicenceState(pro) {
-  sLicenceFree.hidden = pro;
-  sLicencePro.hidden  = !pro;
-  isPro = pro;
-}
-
-sActivateBtn.addEventListener('click', () => {
-  const key = sLicenceInput.value.trim();
-  if (!key) { setLicenceMsg('Paste your licence key above.', '#dc2626'); return; }
-  sActivateBtn.disabled = true;
-  setLicenceMsg('Activating…', '#6b7280');
-  chrome.runtime.sendMessage({ type: 'LICENCE_ACTIVATE', key }, (res) => {
-    sActivateBtn.disabled = false;
-    if (res?.success) {
-      sLicenceInput.value = '';
-      setLicenceMsg('', '');
-      showLicenceState(true);
-    } else {
-      setLicenceMsg(res?.error ?? 'Activation failed — check your key.', '#dc2626');
-    }
-  });
-});
-
-sLicenceInput.addEventListener('keydown', e => { if (e.key === 'Enter') sActivateBtn.click(); });
-
-sDeactivateBtn.addEventListener('click', () => {
-  if (!confirm('Remove your Pro licence from this browser?')) return;
-  chrome.runtime.sendMessage({ type: 'LICENCE_DEACTIVATE' }, () => showLicenceState(false));
-});
-
 // ── Accent colour ────────────────────────────────────────────────────────────
 function applyAccent(hex) {
   document.documentElement.style.setProperty('--cfm-accent', hex);
@@ -1391,9 +1312,4 @@ chrome.storage.sync.get('accentColor', ({ accentColor }) => {
 // failure elsewhere in startup can't leave a stale banner stuck on screen.
 refreshAuthErrorBanner();
 
-chrome.runtime.sendMessage({ type: 'LICENCE_CHECK' }, res => {
-  const pro = DEV_FORCE_PRO || (res?.isPro ?? false);
-  isPro = pro;
-  showLicenceState(pro);
-  init();
-});
+init();

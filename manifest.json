@@ -7,8 +7,7 @@
   "side_panel": { "default_path": "options/options.html" },
   "host_permissions": [
     "https://app.clickup.com/*",
-    "https://api.clickup.com/*",
-    "https://clickoffext.netlify.app/*"
+    "https://api.clickup.com/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
