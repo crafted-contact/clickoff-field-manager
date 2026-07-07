@@ -4,6 +4,22 @@ All notable changes to **ClickOff Field Manager** are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); this project
 uses [semantic versioning](https://semver.org/).
 
+## [1.0.1] — 2026-07-08
+
+### Added
+- **Self-healing field tags.** Each tagging pass now verifies that a tagged
+  custom-field row still matches its recorded field — the row must still carry
+  the field's UUID in an attribute *or* still show the field's name as its label.
+  If neither holds, the stale tag is cleared and the row is re-tagged to its
+  current field. This hardens against a previously reported symptom where two
+  fields (e.g. *Client Notes* and *Review Date*) could appear to show/hide each
+  other's row. The original trigger was Angular CDK virtual-scroll **row
+  recycling** reusing a DOM node for a different field while our tag stuck to the
+  node; ClickUp's current v4 layout renders all rows at once and no longer
+  recycles, so the bug is not reproducible today — but this check guarantees the
+  class of bug cannot recur if ClickUp reuses row nodes again or across task
+  navigation. The check is conservative (never clears a valid tag) and idempotent.
+
 ## [1.0.0] — 2026-07-05
 
 First public release.

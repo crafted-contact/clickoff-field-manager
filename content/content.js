@@ -496,8 +496,63 @@ function findFieldRow(el) {
 // Strategy 2 (UUID_ATTRS fallback):
 //   For any fields not resolved by Strategy 1 (e.g. outside the virtual scroll,
 //   or in a different layout), fall back to the proven UUID attribute + LCA walk.
+//
+// Tag integrity: a previously-tagged CDK row is trusted only while its live
+// content still matches the tag. ClickUp's current v4 field list renders every
+// row at once and does not recycle nodes, so this practically never fires — but
+// if ClickUp ever reuses a row DOM node for a different field (older layouts did
+// this via CDK virtual-scroll recycling, and Angular can reuse containers across
+// task navigations), a stale data-cfm-field-id would otherwise stick forever and
+// two fields would appear to toggle each other. Validating cheaply prevents that
+// class of bug from ever recurring.
+// ---------------------------------------------------------------------------
+
+// True if a tagged row's live content still matches its recorded field — i.e.
+// the row still carries the field's UUID in some attribute OR still shows the
+// field's name as a text node. Only when NEITHER holds is the tag stale. This is
+// deliberately conservative: a correctly-tagged row always still shows its own
+// label, so this never clears a good tag; it only catches a recycled/reused row.
+function tagStillMatchesRow(row) {
+  const id = row.dataset.cfmFieldId;
+  if (!id) return true;
+
+  // (a) UUID still present anywhere in the row?
+  for (const el of row.querySelectorAll('*')) {
+    for (const attr of el.attributes) {
+      if (attr.value === id) return true;
+    }
+  }
+
+  // (b) recorded field name still present as a text node (the label)?
+  const name = row.dataset.cfmFieldName;
+  if (name) {
+    const target = normalizeText(name);
+    const tw = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    let tn;
+    while ((tn = tw.nextNode())) {
+      if (normalizeText(tn.textContent) === target) return true;
+    }
+  }
+
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 function tagFieldElements(panel, fields) {
+  // Self-heal stale tags before trusting them. Scoped to CDK field rows (never
+  // structural tags on plain divs). Clearing an outdated tag drops it back into
+  // the untagged pool so the pass below re-tags the row to its current field and
+  // re-measures its natural height. Idempotent — no-op when all tags are valid.
+  for (const row of panel.querySelectorAll(
+    '.cu-task-custom-fields__virtual-scroll-row[data-cfm-field-id]'
+  )) {
+    if (!tagStillMatchesRow(row)) {
+      delete row.dataset.cfmFieldId;
+      delete row.dataset.cfmFieldName;
+      delete row.dataset.cfmNaturalH;
+    }
+  }
+
   // Skip fields already tagged anywhere in the panel.
   const alreadyTagged = new Set(
     [...panel.querySelectorAll('[data-cfm-field-id]')].map(el => el.dataset.cfmFieldId)
