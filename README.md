@@ -1,24 +1,88 @@
 # ClickOff Field Manager
 
-A Chrome extension (Manifest V3) that brings tabbed task views and conditional field visibility to ClickUp. Group custom fields into named tabs per task type — only the fields assigned to the active tab are shown. Presets are stored per workspace × task type, so every task type can have a completely independent layout.
+**Tabbed task views and conditional field visibility for ClickUp.**
+
+Some ClickUp tasks have 20, 30, 40 custom fields — and you only need a handful at any given moment. ClickOff gives every task a clean, **tabbed** layout: you group custom fields into named tabs (e.g. *Brief*, *Delivery*, *QA*) and only the fields in the active tab are shown. Each **task type** keeps its own independent layout, so your *Email* tasks and your *Bug* tasks can look completely different.
+
+Free Chrome extension (Manifest V3). Your settings and ClickUp token stay on your device — no analytics, no tracking, no server other than ClickUp.
+
+> ClickOff Field Manager is an independent, third-party browser extension that works with ClickUp. It is not made by, affiliated with, or endorsed by ClickUp.
+
+<!-- screenshots -->
 
 ---
 
-## Table of Contents
+## Features
 
-1. [Architecture Overview](#architecture-overview)
-2. [File Structure](#file-structure)
-3. [Storage Schema](#storage-schema)
-4. [Content Script — `content/content.js`](#content-script)
-5. [Options Panel — `options/options.js`](#options-panel)
-6. [Service Worker — `background/service-worker.js`](#service-worker)
-7. [Popup — `popup/popup.js`](#popup)
-8. [Licensing (Pro)](#licensing-pro)
-9. [Pre-publish Checklist](#pre-publish-checklist)
+- **Tabbed task views** — group custom fields into named tabs. Only the fields in the active tab are shown; the rest are tucked away.
+- **Per task type** — each task type gets its own independent layout, remembered automatically.
+- **Conditional visibility** — show or hide a field based on another field's value (e.g. reveal *Rejection reason* only when Status is *Rejected*).
+- **Templates** — save a layout once and apply it to other task types or lists.
+- **Fast and private** — settings and your ClickUp API token stay on-device. No tracking, nothing sold.
+- **Free & unlimited** — all features, unlimited tabs.
 
 ---
 
-## Architecture Overview
+## Install
+
+This extension is distributed as an unpacked build you load yourself (it may also be on the Chrome Web Store — see Releases).
+
+1. Download the latest `clickoff-field-manager-vX.Y.Z.zip` from the [**Releases**](../../releases) page.
+2. Unzip it to a folder you'll keep (Chrome loads it from this location).
+3. Open `chrome://extensions` in Chrome.
+4. Turn on **Developer mode** (top-right toggle).
+5. Click **Load unpacked** and select the unzipped folder.
+
+The ClickOff icon appears in your toolbar. Clicking it opens the configuration **side panel**.
+
+> To update later: download the new release, unzip over the same folder (or a new one), then click the **↺ reload** icon on the extension's card at `chrome://extensions`.
+
+---
+
+## Setup — connect your ClickUp account
+
+ClickOff reads your task's custom fields using your own **ClickUp personal API token**. It's created in ClickUp and stays on your device.
+
+1. **Generate the token in ClickUp:** click your avatar (bottom-left) → **Settings** → **Apps** → under *API Token*, click **Generate** (or **Regenerate**). Copy the token — it starts with `pk_`.
+2. **Add it to ClickOff:** open a ClickUp task, click the ClickOff toolbar icon to open the side panel, open **⚙ Settings**, paste the token, and click **Save & Verify**. A green confirmation means it's connected.
+
+Then open a task and start building tabs for its task type. Switch tabs to reveal exactly the fields you need.
+
+---
+
+## Privacy
+
+- Your **ClickUp API token is stored on your device only** (`chrome.storage.local`) and is never sent to the developer or any third party.
+- The extension **contacts no server other than ClickUp** (`api.clickup.com`), and only using your own token to read the current task's fields.
+- Your tab/field configuration is stored in Chrome storage (synced to your own Chrome profile). No analytics, no tracking.
+
+Full policy: **https://clickoffext.netlify.app/privacy**
+
+---
+
+## Support
+
+ClickOff is **completely free** — all features, unlimited tabs. If it saves you time, an optional tip is always welcome:
+
+☕ **[Buy me a coffee](https://buymeacoffee.com/dmonahu)** (also linked in the side panel under ⚙ Settings → Support this project)
+
+Bugs and feature requests: please open a GitHub [issue](../../issues). Or email **david@craftedcontact.com**.
+
+---
+
+## Trademark
+
+"ClickUp" is a trademark of Mango Technologies, Inc. Used here only to describe compatibility. ClickOff is an independent product and is not affiliated with, sponsored by, or endorsed by ClickUp.
+
+---
+
+## Development
+
+Contributions welcome. The extension is vanilla JS (no build step) — load it unpacked (see [Install](#install)) and edit the source directly. After a code change, reload the extension at `chrome://extensions` and hard-refresh the ClickUp tab.
+
+Architecture and internals are documented below.
+
+### Architecture Overview
 
 ```
 Chrome icon click
@@ -26,95 +90,86 @@ Chrome icon click
       ▼
 Side panel opens (options/options.html)   ◄──── chrome.sidePanel.setPanelBehavior
       │
-      │  reads/writes chrome.storage.sync
-      │  sends cfm_active_type / cfm_active_tab via chrome.storage.local
+      │  reads/writes chrome.storage
+      │  sends cfm_active_type / cfm_active_tab / cfm_notify via chrome.storage.local
       │
       ▼
 Content script (content/content.js)       ◄──── injected on app.clickup.com/*
   • Detects task open via URL polling + MutationObserver
   • Reads task type from DOM
   • Loads preset from chrome.storage.sync
-  • Injects CFM tab strip into ClickUp task panel
-  • Hides/shows fields using CSS classes + inline styles
-  • Applies visibility rules on top of tab visibility
+  • Injects the CFM tab strip into the ClickUp task panel
+  • Hides/shows fields via data attributes + injected CSS
+  • Applies conditional visibility rules on top of tab visibility
       │
       │  chrome.runtime.sendMessage (CLICKUP_API)
       ▼
 Service worker (background/service-worker.js)
-  • Proxies ClickUp REST API calls (auth token in storage, never in content)
-  • Caches responses for 60 s
-  • Validates Pro licence key (local passphrase check, no external API)
+  • Proxies ClickUp REST API calls (auth token in storage, never in the page)
+  • Caches responses for ~60 s
 ```
 
----
-
-## File Structure
+### File Structure
 
 ```
 clickup-field-manager/
 ├── manifest.json                   MV3 manifest
 ├── background/
-│   └── service-worker.js           API proxy + licence handler
+│   └── service-worker.js           ClickUp API proxy
 ├── content/
-│   ├── content.js                  Core extension logic (injected into ClickUp)
-│   └── content.css                 CFM styles injected into ClickUp page
+│   ├── content.js                  Core logic (injected into ClickUp)
+│   └── content.css                 Styles injected into the ClickUp page
 ├── options/
 │   ├── options.html                Side panel + settings UI
 │   ├── options.js                  Side panel logic
 │   └── options.css                 Side panel styles
-├── popup/
-│   ├── popup.html                  Legacy popup (kept for reference; not used)
-│   ├── popup.js
-│   └── popup.css
 └── icons/
     ├── icon16.png
     ├── icon48.png
     └── icon128.png
 ```
 
-> **Note:** The popup is no longer used. Clicking the extension icon opens the side panel directly via `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`. The popup files are retained but `"default_popup"` is not set in the manifest.
+> Clicking the extension icon opens the side panel directly via `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`.
 
----
+### Storage Schema
 
-## Storage Schema
-
-### `chrome.storage.sync` (synced across Chrome profiles)
+#### `chrome.storage.sync` (synced across the user's Chrome profiles)
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `apiToken` | `string` | ClickUp Personal API Token |
-| `accentColor` | `string` | Hex colour for CFM UI accent (`#7b68ee` default) |
-| `licence` | `{ valid: boolean }` | Pro licence state |
+| `accentColor` | `string` | Hex colour for the UI accent (`#7b68ee` default) |
 | `preset_{workspaceId}_{typeKey}` | `PresetConfig` | Tab/rule preset for one task type in one workspace |
 | `fields_{listId}` | `Field[]` | Cached field list for a ClickUp list |
-| `cfm_templates` | `Template[]` | Named reusable tab layout templates |
+| `cfm_templates` | `Template[]` | Named, reusable tab-layout templates |
+
+#### `chrome.storage.local` (device-only)
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `apiToken` | `string` | ClickUp personal API token — device-only, never synced or sent to the developer |
+| `cfm_active_type` | `{ workspaceId, typeKey, typeName, listId }` | Written by the content script when a task opens; the panel auto-follows the active task type |
+| `cfm_active_tab` | `{ tabId, ts }` | Written when the user clicks a CFM tab; the panel auto-selects that tab |
+| `cfm_notify` | `{ workspaceId, typeKey, ts }` | Written by the panel after saving; the content script's `onChanged` listener re-applies config |
+| `task_meta_{taskId}` | `{ listId, workspaceId, typeKey, typeName }` | Phase-1 task cache; avoids an API round-trip on revisit |
 
 #### `PresetConfig`
 
 ```jsonc
 {
   "tabs": [
-    {
-      "id": "tab-abc123",        // UUID
-      "name": "Finance",
-      "fields": ["field-id-1", "field-id-2", "__s_description"]
-    }
+    { "id": "tab-abc123", "name": "Finance", "fieldIds": ["field-id-1", "__s_description"] }
   ],
   "rules": [
     {
       "targetFieldId": "field-id-3",
-      "action": "hide",          // "hide" | "show"
-      "logic": "AND",            // "AND" | "OR"
+      "action": "hide",              // "hide" | "show"
+      "logic": "AND",                // "AND" | "OR"
       "conditions": [
-        {
-          "fieldId": "field-id-1",
-          "operator": "equals",  // "equals" | "not_equals" | "contains" | "is_empty" | "is_not_empty"
-          "value": "Approved"
-        }
+        { "fieldId": "field-id-1", "operator": "equals", "value": "Approved" }
       ]
     }
   ],
-  "defaultTab": "tab-abc123"     // null = "All Fields" is default
+  "defaultTab": "tab-abc123"         // null = "All Fields" is default
 }
 ```
 
@@ -122,228 +177,37 @@ clickup-field-manager/
 
 ```jsonc
 {
-  "id": "abc123",                // ClickUp custom field ID, or "__s_*" for structural fields
+  "id": "abc123",      // ClickUp custom field ID, or "__s_*" for a structural (built-in) section
   "name": "Budget",
-  "type": "currency"             // ClickUp field type, or "structural" for built-in sections
+  "type": "currency"   // ClickUp field type, or "structural" for built-in sections
 }
 ```
 
-### `chrome.storage.local` (device-only, used for cross-component signalling)
+### Content Script — `content/content.js`
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `cfm_active_type` | `{ workspaceId, typeKey, typeName, listId }` | Written by content script when a task opens; read by options panel to auto-follow the active task type |
-| `cfm_active_tab` | `{ tabId, ts }` | Written by content script when user clicks a CFM tab; options panel auto-selects that tab for field assignment |
-| `cfm_notify` | `{ workspaceId, typeKey, ts }` | Written by options panel after saving; triggers content script `onChanged` listener to re-apply config |
-| `task_meta_{taskId}` | `{ listId, workspaceId, typeKey, typeName }` | Phase-1 task cache; avoids API round-trip on revisit |
+Injected at `document_idle` on `https://app.clickup.com/*`.
 
----
+- **`handleTaskOpen(taskId, panel)`** — entry point when a task opens. *Phase 1:* reads `task_meta_{taskId}` and renders the tab strip instantly from cache. *Phase 2:* fetches fields from the API, reads the task type from the DOM, loads the full preset, tags field rows, and applies the active tab + rules.
+- **`tagFieldElements(panel, fields)`** — locates each field's DOM row and tags it with `data-cfm-field-id`. Includes a **self-healing** integrity check: if a tagged row no longer carries the field's UUID or its name label, the stale tag is cleared and the row re-tagged (guards against DOM node reuse).
+- **`applyTab(panel, activeTabId, tabs)`** — hides tagged rows not in the active tab via `data-cfm-tab-hidden`; `__all` shows everything. Structural sections are handled via injected CSS in `applyStructuralVisibility`.
+- **`applyVisibilityRules(panel, fields, rules)`** — evaluates AND/OR conditions against current field values and hides/shows the target field. Runs on top of tab visibility.
+- **`scheduleRetries` / `setupPanelObserver`** — re-tag and re-apply as ClickUp renders fields lazily (retry schedule + a debounced `MutationObserver`).
+- **`ensureTabStripSpacing(panel)`** — inserts a spacer after the tab strip. **Idempotent** — it only inserts if absent, which is critical: it's called on every `applyTab`, itself triggered by the observer, so re-adding a node each call would create an infinite loop.
 
-## Content Script
+### Options Panel — `options/options.js`
 
-**File:** `content/content.js`  
-**Injected at:** `document_idle` on `https://app.clickup.com/*`
+The side panel (`options/options.html`), opened on icon click.
 
-### Key Constants
+- **`loadTypeContext({ workspaceId, typeKey, typeName, listId })`** — switches the panel to a task type: loads its preset, fetches the list's fields, renders all sections.
+- **`savePreset(workspaceId, typeKey, config)`** — writes `PresetConfig` to `chrome.storage.sync` under `preset_{workspaceId}_{typeKey}`.
+- **`autoSave()`** — debounced `savePreset` + a `cfm_notify` write so any open task re-applies immediately.
+- The panel auto-follows the open task via `chrome.storage.onChanged` on `cfm_active_type` / `cfm_active_tab`.
 
-| Name | Value | Purpose |
-|------|-------|---------|
-| `STRUCTURAL_SELECTORS` | array | ClickUp built-in sections (Title, Description, Status, etc.) that can be assigned to tabs |
-| `STRUCTURAL_FIELDS` | derived | `STRUCTURAL_SELECTORS` mapped to `Field` objects with `type: 'structural'` |
+### Service Worker — `background/service-worker.js`
 
-### State Variables
+- Opens the side panel on icon click.
+- Proxies ClickUp API calls (`CLICKUP_API` messages): reads `apiToken` from storage, fetches, and caches responses (~60 s TTL). The token never enters the page context.
 
-| Variable | Description |
-|----------|-------------|
-| `taskCache` | `Map<taskId, { listId, workspaceId, fields }>` — in-memory session cache |
-| `activeWorkspaceId` | Workspace ID of the currently open task |
-| `activeTaskTypeKey` | Normalised type key, e.g. `"project"`, `"email"` |
-| `activeTaskTypeName` | Display name, e.g. `"Project"` |
-| `activePresetConfig` | `PresetConfig` for the current task type |
+### Contributing
 
-### Core Functions
-
-#### `handleTaskOpen(taskId, panel)`
-Main entry point when a ClickUp task is opened.
-
-**Phase 1 (instant):** Reads `task_meta_{taskId}` from local storage → loads preset → renders tab strip immediately with cached data.
-
-**Phase 2 (async):** Calls `fetchTaskFields(taskId)` → calls `getTaskTypeFromDom()` (with 400 ms retry) → normalises type key → loads full preset → rebuilds tab strip → tags all field DOM elements → applies active tab + visibility rules.
-
-#### `fetchTaskFields(taskId)`
-Sends `CLICKUP_API` message to service worker for `/task/{id}`. Returns `{ listId, workspaceId, fields }`. Writes result to `task_meta_{taskId}` and `fields_{listId}` in local storage.
-
-#### `getTaskTypeFromDom()`
-Reads task type name from the DOM selector `[data-test="cu-task-view-task-label__task-type"]`. The ClickUp API does not expose custom task types — DOM is the only reliable source.
-
-#### `normalizeTypeKey(name)`
-Converts a display name to a stable storage key: lowercase, non-alphanumeric runs replaced with `_`, leading/trailing underscores stripped. E.g. `"Client Email"` → `"client_email"`.
-
-#### `presetKey(workspaceId, typeKey)`
-Returns `preset_{workspaceId}_{typeKey}` — the `chrome.storage.sync` key for a preset.
-
-#### `loadPreset(workspaceId, typeKey)`
-Reads preset from `chrome.storage.sync`. Returns `{ tabs: [], rules: [] }` if none saved.
-
-#### `buildTabStrip(panel, tabs, currentTabId)`
-Injects the CFM tab bar into the task panel `<head>` (appended last to win CSS source-order). Renders "All Fields" + one button per tab. Each tab button:
-- Has `data-cfm-tab` attribute for click delegation
-- Writes `cfm_active_tab` to local storage on click so the options panel auto-follows
-- Reads `defaultTab` from config to mark the default with a subtle indicator
-
-#### `tagFieldElements(panel, fields)`
-Iterates over every field in the preset and locates its DOM row(s) using `findFieldRow()`. Tags matched rows with `data-cfm-field-id` and records their natural height for CDK viewport clamping.
-
-#### `applyTab(panel, activeTabId, tabs)`
-Shows fields belonging to `activeTabId` by removing `cfm-hidden` class; hides all others by adding it. For `__all`, all fields are shown. Also handles structural elements via `applyStructuralVisibility()`.
-
-#### `applyVisibilityRules(panel, fields, rules)`
-Evaluates each rule in `activePresetConfig.rules`. Reads current field values from the DOM via `findFieldRow()`, evaluates conditions with AND/OR logic, then hides or shows the target field by toggling `cfm-rule-hidden` class. Runs after `applyTab` — rules apply on top of tab visibility.
-
-#### `scheduleRetries(panel, fields, config)`
-Re-runs `tagFieldElements` + `applyTab` + `applyVisibilityRules` at 500 ms, 1500 ms, and 3000 ms after task open, to catch fields that ClickUp renders late via virtual scroll.
-
-#### `reapplyConfig(config)`
-Called by the `onChanged` listener when the options panel saves a new preset. Updates `activePresetConfig` and re-renders the tab strip and field visibility without re-fetching the API.
-
-#### `ensureTabStripSpacing(panel)`
-Inserts a fixed-height spacer div immediately after the tab strip so the first visible field has breathing room. **Idempotent** — checks whether the spacer already exists before inserting. This is critical: the function is called on every `applyTab` invocation, which is itself triggered by the `MutationObserver`. If the spacer were removed and re-added each call it would create an infinite observer loop (new node added → observer fires → applyTab → spacer re-added → observer fires…). The idempotency check breaks this cycle.
-
-#### `collapseEmptyWrappers(panel)` / `clampCdkViewport(panel)`
-Post-tab-switch cleanup that forces ClickUp's CDK virtual scroll viewport to the correct height and hides any section wrappers that contain only hidden fields.
-
----
-
-## Options Panel
-
-**Files:** `options/options.html`, `options/options.js`, `options/options.css`  
-**Opened via:** Chrome side panel (icon click)
-
-### UI Sections
-
-| Section | ID | Description |
-|---------|----|-------------|
-| Settings | `#settings-section` | Collapsed by default behind ⚙ toggle. Contains token, licence, accent colour. |
-| Task Type | `#list-select-section` | Shows active task type banner. Contains field-source list picker (in `<details>`). |
-| Tabs | `#tabs-section` | Add/rename/delete tabs. Per-tab default checkbox. "All Fields" default checkbox. |
-| Visible in … | `#field-assignment-section` | Field checklist for the selected tab. |
-| Visibility Rules | `#rules-section` | Rule builder: target field + action + AND/OR conditions. |
-| Templates | `#templates-section` | Save/load/edit/bulk-apply named presets. |
-
-### State Variables
-
-| Variable | Description |
-|----------|-------------|
-| `currentWorkspaceId` | Workspace ID of the task type being edited |
-| `currentTypeKey` | Normalised key for the task type being edited |
-| `currentTypeName` | Display name for the task type being edited |
-| `currentListId` | List used to fetch available fields (the "field source") |
-| `currentFields` | `Field[]` — all fields available for the current list |
-| `currentConfig` | `PresetConfig` — the live in-memory preset being edited |
-| `selectedTabId` | ID of the tab currently selected in the field-assignment section |
-| `isPro` | Boolean — whether Pro licence is active |
-
-### Core Functions
-
-#### `loadTypeContext({ workspaceId, typeKey, typeName, listId })`
-Primary function for switching the panel to a new task type. Loads the preset, fetches fields from the list, updates all UI sections.
-
-#### `loadFieldSource(listId)`
-Changes the field source list without changing the preset key. Used via the `<details>` field-source picker when the auto-detected list doesn't have all the fields.
-
-#### `savePreset(workspaceId, typeKey, config)`
-Writes `PresetConfig` to `chrome.storage.sync` under `presetKey(workspaceId, typeKey)`.
-
-#### `notifyContentScripts(workspaceId, typeKey)`
-Writes `cfm_notify` to `chrome.storage.local` so the content script's `onChanged` listener picks up the new preset and re-applies it to any open task.
-
-#### `autoSave()`
-Calls `savePreset` + `notifyContentScripts` debounced — triggered after any change to tabs, field assignments, rules, or default checkbox.
-
-#### `renderTabs()`
-Re-renders the tabs list. Each tab item includes:
-- Tab name (click to select for field assignment)
-- Default radio checkbox (mutually exclusive with "All Fields" and other per-tab defaults)
-- Delete button
-
-#### `showLicenceState(isPro)`
-Toggles `#s-licence-free` / `#s-licence-pro` visibility and updates the module-level `isPro` flag (which gates the 3-tab limit).
-
-### Tab Limit (Free tier)
-Free users are limited to **3 tabs per task type**. The `+ Add Tab` button and template-load paths check `isPro` and show an upgrade badge with a link to `https://buymeacoffee.com/dmonahu` when the limit is reached.
-
-### Auto-follow Behaviour
-
-The panel listens to `chrome.storage.onChanged`:
-
-- **`cfm_active_type` changed** → calls `loadTypeContext()` with the new task type. The panel automatically switches to the preset for whatever task is open in ClickUp.
-- **`cfm_active_tab` changed** → if `tabId === '__all'`, deselects the active tab. Otherwise, finds the matching tab in `currentConfig.tabs` and opens its field-assignment view.
-
----
-
-## Service Worker
-
-**File:** `background/service-worker.js`
-
-### Responsibilities
-
-1. **Side panel on icon click** — `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`
-2. **ClickUp API proxy** — handles `CLICKUP_API` messages from content script and options panel. Reads `apiToken` from `chrome.storage.sync`, makes the fetch, caches the result for 60 s.
-3. **Licence validation** — handles `LICENCE_ACTIVATE`, `LICENCE_CHECK`, `LICENCE_DEACTIVATE` messages.
-
-### Message Types
-
-| Type | Sent by | Payload | Response |
-|------|---------|---------|----------|
-| `CLICKUP_API` | content script, options panel | `{ path: string }` | `{ data }` or `{ error }` |
-| `CLICKUP_INVALIDATE` | content script | `{ path: string }` | (none) |
-| `LICENCE_ACTIVATE` | options panel, popup | `{ key: string }` | `{ success: boolean, error?: string }` |
-| `LICENCE_CHECK` | options panel, popup | — | `{ isPro: boolean }` |
-| `LICENCE_DEACTIVATE` | options panel, popup | — | `{ success: boolean }` |
-
-### API Cache
-
-Responses are cached in a `Map` keyed by path with a 60-second TTL. `CLICKUP_INVALIDATE` removes a single entry (sent by the content script when a task is re-opened to force a fresh field fetch).
-
----
-
-## Popup
-
-**Files:** `popup/popup.html`, `popup/popup.js`, `popup/popup.css`
-
-The popup is **no longer the primary UI** — clicking the extension icon opens the side panel. The popup HTML/JS is retained as a fallback and reference only; `"default_popup"` is not set in `manifest.json`.
-
-The popup contains:
-- ClickUp API token input (save & verify)
-- Licence section (activate / deactivate Pro)
-- Accent colour picker
-- "Open Configuration Panel →" button (opens side panel)
-- "↺ Reload ClickUp tab" button (convenience reload for the active ClickUp tab)
-
----
-
-## Pricing
-
-The extension is **free and unrestricted** — all features, unlimited tabs, no
-licence. Support is entirely optional via a **Buy Me a Coffee** link in
-⚙ Settings → Support this project ([buymeacoffee.com/dmonahu](https://buymeacoffee.com/dmonahu)).
-
-There is no licence server and the extension makes no network requests other than
-to ClickUp (`api.clickup.com`) using the user's own token.
-
-> The previous HMAC licence system (Netlify function, `tools/mint-licence.mjs`,
-> `LICENSING.md`) is retained in git history on the `main` branch in case a paid
-> tier is ever reintroduced, but is not used in this version.
-
----
-
-## Pre-publish Checklist
-
-Before submitting to the Chrome Web Store:
-
-- [ ] `manifest.json` version number bumped
-- [ ] `icons/` contains all three sizes (16, 48, 128)
-- [ ] No `console.log` calls left for sensitive data (API token, licence key)
-
-See [`../PUBLISHING.md`](../PUBLISHING.md) for the full Chrome Web Store submission checklist.
-- [ ] Privacy policy URL added to CWS listing (required — extension accesses ClickUp API)
+Issues and pull requests are welcome. For anything user-facing, please describe the ClickUp task type and fields involved so it can be reproduced.
