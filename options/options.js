@@ -64,6 +64,42 @@ function savePreset(workspaceId, typeKey, config) {
 }
 
 // ---------------------------------------------------------------------------
+// Field-name → id resolution for name-based templates.
+//
+// Templates store field *names* (portable across workspaces/lists where UUIDs
+// differ). Resolving names back to ids must EXCLUDE the non-assignable built-in
+// fields (__status, __assignees, __priority, __tags, __due_date, __time_estimate):
+// these never appear in the field checklist, yet each shares a name with its
+// structural section counterpart (__s_status is also "Status", etc.). A naive
+// `new Map(fields.map(f => [f.name.toLowerCase(), f.id]))` lets the built-in
+// overwrite the structural id, so a round-tripped "Status" section would resolve
+// to the dead __status id and silently stop hiding. Excluding built-ins keeps
+// names unambiguous for everything the user can actually assign; any residual
+// duplicate (e.g. a custom field named exactly like a structural section) is
+// resolved first-wins, with a warning for support.
+// ---------------------------------------------------------------------------
+function isAssignableField(f) {
+  // Structural sections (__s_*) and real custom fields are assignable; the plain
+  // built-in __-fields are not (they're excluded from the assignment checklist).
+  return !(f.id.startsWith('__') && !f.id.startsWith('__s_'));
+}
+
+function buildNameToId(fields) {
+  const map = new Map();
+  for (const f of fields) {
+    if (!isAssignableField(f)) continue;
+    const key = (f.name ?? '').toLowerCase();
+    if (!key) continue;
+    if (map.has(key)) {
+      console.warn(`[ClickOff] duplicate field name "${f.name}" — template resolves it to the first match (${map.get(key)}).`);
+      continue; // first-wins: deterministic, prefers the earlier (structural) field
+    }
+    map.set(key, f.id);
+  }
+  return map;
+}
+
+// ---------------------------------------------------------------------------
 // API helper — proxies through service worker
 // ---------------------------------------------------------------------------
 function apiGet(path) {
@@ -235,7 +271,7 @@ quickApplyBtn.addEventListener('click', async () => {
   const tpl = templates.find(t => t.id === id);
   if (!tpl) return;
 
-  const nameToId = new Map(currentFields.map(f => [f.name.toLowerCase(), f.id]));
+  const nameToId = buildNameToId(currentFields);
   currentConfig = {
     tabs: tpl.config.tabs.map(tab => ({
       id: `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`,
@@ -638,7 +674,7 @@ templateEditBeginBtn.addEventListener('click', async () => {
   // Load the chosen list's available fields, then override config with the template
   await loadList(listId);
 
-  const nameToId = new Map(currentFields.map(f => [f.name.toLowerCase(), f.id]));
+  const nameToId = buildNameToId(currentFields);
   currentConfig = {
     tabs: tpl.config.tabs.map(tab => ({
       id: `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`,
@@ -764,7 +800,6 @@ async function renderTemplates() {
   const opts = '<option value="">— select a template —</option>' +
     templates.map(t => `<option value="${escHtml(t.id)}">${escHtml(t.name)}</option>`).join('');
   templateSelect.innerHTML = opts;
-  bulkTemplateSelect.innerHTML = opts;
   await populateQuickTemplateSelect();
 }
 
@@ -825,7 +860,7 @@ loadTemplateBtn.addEventListener('click', async () => {
   const tpl = templates.find(t => t.id === id);
   if (!tpl) return;
 
-  const nameToId = new Map(currentFields.map(f => [f.name.toLowerCase(), f.id]));
+  const nameToId = buildNameToId(currentFields);
 
   currentConfig = {
     tabs: tpl.config.tabs.map(tab => ({
@@ -1009,189 +1044,6 @@ saveBtn.addEventListener('click', async () => {
   saveStatus.textContent = 'Saved!';
   setTimeout(() => { saveStatus.textContent = ''; }, 2500);
 });
-
-// ---------------------------------------------------------------------------
-// Bulk Apply
-// ---------------------------------------------------------------------------
-const showBulkApplyBtn   = document.getElementById('show-bulk-apply-btn');
-const bulkApplySection   = document.getElementById('bulk-apply-section');
-const bulkTemplateSelect = document.getElementById('bulk-template-select');
-const bulkListSearch     = document.getElementById('bulk-list-search');
-const bulkListChecklist  = document.getElementById('bulk-list-checklist');
-const bulkSelectAllBtn   = document.getElementById('bulk-select-all-btn');
-const bulkClearBtn       = document.getElementById('bulk-clear-btn');
-const bulkApplyBtn       = document.getElementById('bulk-apply-btn');
-const bulkResults        = document.getElementById('bulk-results');
-
-let allWorkspaceLists = [];
-
-showBulkApplyBtn.addEventListener('click', async () => {
-  const opening = bulkApplySection.hidden;
-  bulkApplySection.hidden = !opening;
-  showBulkApplyBtn.textContent = opening ? 'Hide bulk apply ↑' : 'Bulk apply to lists →';
-  if (opening) await populateBulkUI();
-});
-
-async function populateBulkUI() {
-  const local = await chromeGetLocal('workspace_lists');
-  allWorkspaceLists = local.workspace_lists ?? [];
-  syncBulkTemplateSelect();
-  renderBulkListChecklist('');
-}
-
-function syncBulkTemplateSelect() {
-  bulkTemplateSelect.innerHTML = templateSelect.innerHTML;
-}
-
-function renderBulkListChecklist(filter) {
-  const lower = filter.toLowerCase();
-  const visible = lower
-    ? allWorkspaceLists.filter(l => l.path.toLowerCase().includes(lower))
-    : allWorkspaceLists;
-
-  if (!visible.length) {
-    bulkListChecklist.innerHTML = '<p class="empty">No lists found — refresh the list dropdown first.</p>';
-    return;
-  }
-
-  bulkListChecklist.innerHTML = visible.map(l => `
-    <label class="bulk-list-item">
-      <input type="checkbox" value="${escHtml(l.id)}" data-path="${escHtml(l.path)}">
-      <span>${escHtml(l.path)}</span>
-    </label>
-  `).join('');
-}
-
-bulkListSearch.addEventListener('input', () => renderBulkListChecklist(bulkListSearch.value));
-bulkSelectAllBtn.addEventListener('click', () =>
-  bulkListChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true));
-bulkClearBtn.addEventListener('click', () =>
-  bulkListChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false));
-
-bulkApplyBtn.addEventListener('click', async () => {
-  const templateId = bulkTemplateSelect.value;
-  if (!templateId) {
-    bulkResults.innerHTML = '<p class="empty">Select a template first.</p>';
-    return;
-  }
-
-  const selected = [...bulkListChecklist.querySelectorAll('input[type="checkbox"]:checked')]
-    .map(cb => ({ id: cb.value, path: cb.dataset.path }));
-
-  if (!selected.length) {
-    bulkResults.innerHTML = '<p class="empty">Check at least one list.</p>';
-    return;
-  }
-
-  bulkApplyBtn.disabled = true;
-  bulkApplyBtn.textContent = 'Applying…';
-  bulkResults.innerHTML = '';
-
-  const results = await doBulkApply(templateId, selected);
-  renderBulkResults(results);
-
-  bulkApplyBtn.disabled = false;
-  bulkApplyBtn.textContent = 'Apply to selected';
-});
-
-async function doBulkApply(templateId, lists) {
-  const templates = await getTemplates();
-  const tpl = templates.find(t => t.id === templateId);
-  if (!tpl) return [];
-
-  // Collect every field name the template references
-  const allTemplateNames = new Set();
-  tpl.config.tabs.forEach(tab =>
-    (tab.fieldNames ?? []).forEach(n => allTemplateNames.add(n.toLowerCase())));
-  (tpl.config.rules ?? []).forEach(rule => {
-    if (rule.targetFieldName) allTemplateNames.add(rule.targetFieldName.toLowerCase());
-    (rule.conditions ?? []).forEach(c => {
-      if (c.fieldName) allTemplateNames.add(c.fieldName.toLowerCase());
-    });
-  });
-
-  const results = [];
-
-  for (const { id: listId, path } of lists) {
-    let fields;
-    try {
-      fields = await fetchListFields(listId);
-    } catch {
-      results.push({ path, status: 'error', detail: 'Could not fetch fields for this list' });
-      continue;
-    }
-
-    const nameToId = new Map(fields.map(f => [f.name.toLowerCase(), f.id]));
-    const matched = [...allTemplateNames].filter(n => nameToId.has(n));
-    const missing = [...allTemplateNames].filter(n => !nameToId.has(n));
-    const matchCount = matched.length;
-    const totalCount = allTemplateNames.size;
-
-    if (matchCount === 0 && totalCount > 0) {
-      results.push({ path, status: 'none', matched: 0, total: totalCount, missing });
-      continue; // don't write — nothing would show
-    }
-
-    const config = {
-      tabs: tpl.config.tabs.map(tab => ({
-        id: `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        name: tab.name,
-        fieldIds: (tab.fieldNames ?? []).map(n => nameToId.get(n.toLowerCase())).filter(Boolean),
-      })),
-      rules: (tpl.config.rules ?? []).map(rule => ({
-        targetFieldId: nameToId.get(rule.targetFieldName?.toLowerCase()),
-        action: rule.action,
-        logic: rule.logic,
-        conditions: (rule.conditions ?? []).map(c => ({
-          fieldId: nameToId.get(c.fieldName?.toLowerCase()),
-          operator: c.operator,
-          value: c.value,
-        })).filter(c => c.fieldId),
-      })).filter(r => r.targetFieldId),
-      defaultTab: tpl.config.defaultTab ?? null,
-    };
-
-    await chromeSet({ [`config_${listId}`]: config });
-
-    const status = matchCount === totalCount ? 'full' : 'partial';
-    results.push({ path, status, matched: matchCount, total: totalCount, missing });
-  }
-
-  return results;
-}
-
-function renderBulkResults(results) {
-  if (!results.length) return;
-
-  const html = results.map(r => {
-    let icon, cls, detail;
-    if (r.status === 'full') {
-      icon = '✓'; cls = 'full';
-      detail = `${r.matched}/${r.total} fields matched`;
-    } else if (r.status === 'partial') {
-      icon = '⚠'; cls = 'partial';
-      const preview = r.missing.slice(0, 3).map(n => `"${n}"`).join(', ')
-        + (r.missing.length > 3 ? ` +${r.missing.length - 3} more` : '');
-      detail = `${r.matched}/${r.total} matched — not found: ${preview}`;
-    } else if (r.status === 'none') {
-      icon = '✕'; cls = 'none';
-      detail = 'No fields matched — config not written';
-    } else {
-      icon = '✕'; cls = 'none';
-      detail = r.detail ?? 'Failed';
-    }
-
-    return `<div class="bulk-result-item ${cls}">
-      <span class="bulk-result-icon">${icon}</span>
-      <div>
-        <div class="bulk-result-path">${escHtml(r.path)}</div>
-        <div class="bulk-result-detail">${escHtml(detail)}</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  bulkResults.innerHTML = `<div class="bulk-results-list">${html}</div>`;
-}
 
 // ---------------------------------------------------------------------------
 // Utility

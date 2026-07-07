@@ -4,6 +4,27 @@ All notable changes to **ClickOff Field Manager** are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); this project
 uses [semantic versioning](https://semver.org/).
 
+## [1.0.2] — 2026-07-08
+
+### Fixed
+- **Template field-name collisions.** Applying or importing a name-based template
+  resolved field names to IDs via a map that let the non-assignable built-in
+  fields (`__status`, `__assignees`, `__priority`, …) overwrite their structural
+  section counterparts (`__s_status` "Status", etc.). A round-tripped section
+  could resolve to a dead built-in ID and silently stop hiding. Name→ID
+  resolution now excludes those built-ins and de-duplicates deterministically
+  (first match wins, with a warning), so template names map unambiguously to the
+  fields you can actually assign. Centralised in one `buildNameToId` helper used
+  by every template apply/import path.
+
+### Removed
+- **"Bulk apply to lists".** This feature wrote a per-list config key
+  (`config_<listId>`) that nothing has read since presets moved to a per-task-type
+  model — so it reported success while doing nothing, and can't be repaired
+  because ClickUp's API can't enumerate a workspace's custom task types from a
+  list. Removed the UI and its dead code. Per-task-type templates via the normal
+  **Apply** flow are unaffected.
+
 ## [1.0.1] — 2026-07-08
 
 ### Added
