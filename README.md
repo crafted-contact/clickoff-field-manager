@@ -56,7 +56,7 @@ Then open a task and start building tabs for its task type. Switch tabs to revea
 - The extension **contacts no server other than ClickUp** (`api.clickup.com`), and only using your own token to read the current task's fields.
 - Your tab/field configuration is stored in Chrome storage (synced to your own Chrome profile). No analytics, no tracking.
 
-Full policy: **https://clickoffext.netlify.app/privacy**
+**That's the whole policy.** ClickOff has no backend and collects nothing, so there's nothing else to disclose.
 
 ---
 
