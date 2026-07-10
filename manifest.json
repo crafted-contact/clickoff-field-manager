@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClickOff Field Manager",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Tabbed task views and conditional field visibility for ClickUp. Group fields into named tabs — only selected fields are shown.",
   "permissions": ["storage", "sidePanel"],
   "side_panel": { "default_path": "options/options.html" },

@@ -978,6 +978,14 @@ function applyStructuralVisibility(panel, activeTabId, tabs) {
     const inActiveTab = activeTabId === '__all' ||
       (tabs.find(t => t.id === activeTabId)?.fieldIds ?? []).includes(id);
     if (inActiveTab) {
+      // The description restore rules force the Quill editor visible to undo
+      // ClickUp's collapse. But ClickUp ALSO keeps the editor hidden
+      // (cu-editor-content display:none) as its native empty-state, showing only
+      // its own placeholder. If we force it visible there, the absolutely-
+      // positioned editor overlays its placeholder onto ClickUp's → "squash".
+      // So only restore the description once WE have actually hidden it (which
+      // is the only thing that makes ClickUp collapse it in the first place).
+      if (id === '__s_description' && !_descHiddenByUs) continue;
       sels.forEach(sel => restoreRules.push(
         `${sel} { display: block !important; height: auto !important; ` +
         `min-height: 0 !important; max-height: none !important; overflow: visible !important; }`
@@ -1014,6 +1022,10 @@ function applyStructuralVisibility(panel, activeTabId, tabs) {
     (entry.hideSels ?? [entry.sel]).forEach(sel => {
       cssRules.push(`${sel} { display: none !important; }`);
     });
+    // Record that we've hidden the description at least once. Hiding it is what
+    // makes ClickUp internally collapse it, so from now on the restore rules
+    // above are needed to un-collapse it when it becomes visible again.
+    if (id === '__s_description') _descHiddenByUs = true;
   }
 
   styleEl.textContent = cssRules.join('\n');
@@ -1043,6 +1055,11 @@ function applyStructuralVisibility(panel, activeTabId, tabs) {
 // ---------------------------------------------------------------------------
 let _descNudgeTimer  = null;
 let _descPrevInTab   = false; // was description visible on the previous tab?
+// Have WE hidden the description at least once this task view? Only then does
+// ClickUp collapse it, making the restore rules necessary. Until then, ClickUp's
+// native empty-state rendering is correct and must not be overridden (else the
+// empty editor's placeholder overlays ClickUp's own → squash). Reset per task.
+let _descHiddenByUs  = false;
 
 function nudgeDescriptionExpansion(descNowInTab) {
   const wasNotInTab = !_descPrevInTab;
@@ -1198,6 +1215,9 @@ function scheduleRetries(panel, fields, config) {
 //   current field values.
 // ---------------------------------------------------------------------------
 async function handleTaskOpen(taskId, panel) {
+  // Fresh task view: its description DOM is in ClickUp's native state and we
+  // haven't hidden it yet, so restore rules must stay off until we do.
+  _descHiddenByUs = false;
   try {
     // ── Phase 1: immediate strip from cache ──────────────────────────────────
     // task_meta_${taskId} stores { workspaceId, typeKey, typeName, listId }

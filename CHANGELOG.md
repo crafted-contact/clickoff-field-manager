@@ -4,6 +4,22 @@ All notable changes to **ClickOff Field Manager** are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); this project
 uses [semantic versioning](https://semver.org/).
 
+## [1.0.3] — 2026-07-11
+
+### Fixed
+- **Squashed description on task open.** On the default (All Fields) view, an
+  empty description rendered with its two placeholder lines overlapping —
+  ClickUp's native "Add description, or write with AI" stacked on top of Quill's
+  "Write, press space…" — until the field was clicked into. The structural
+  restore rules that un-collapse the description force its Quill editor visible
+  with `display:block`, but ClickUp deliberately keeps that editor hidden
+  (`cu-editor-content: display:none`) as its native empty-state and shows only
+  its own placeholder; forcing it visible overlaid the absolutely-positioned
+  editor on top. The restore rules now fire only after ClickOff has actually
+  hidden the description on a tab — the one thing that makes ClickUp collapse it
+  — so an untouched description keeps ClickUp's native rendering. Tracked via a
+  per-task `_descHiddenByUs` flag.
+
 ## [1.0.2] — 2026-07-08
 
 ### Fixed
